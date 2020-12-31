@@ -30,6 +30,7 @@ class AddrSpace {
     void SaveState();           // Save/restore address space-specific
     void RestoreState();        // info on a context switch 
 
+    TranslationEntry * getPage(int i) const { return &pageTable[i];}
   private:
     TranslationEntry *pageTable;    // Assume linear page table translation
                     // for now!
@@ -42,7 +43,7 @@ class AddrSpace {
     void InitRegisters();       // Initialize user-level CPU registers,
                     // before jumping to user code
 
-    static bool StatusTable[NumPhysPages];       //  record phy page status
+    bool pt_is_load;
 
 };
 

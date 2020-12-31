@@ -69,7 +69,7 @@ ExceptionHandler(ExceptionType which)
         			val=kernel->machine->ReadRegister(4);
         			// cout << "Sleep Time:" << val << "(ms)" << endl;
         			kernel->alarm->WaitUntil(val);
-        			break;
+        			return;
 /*		case SC_Exec:
 			DEBUG(dbgAddr, "Exec\n");
 			val = kernel->machine->ReadRegister(4);
@@ -89,9 +89,16 @@ ExceptionHandler(ExceptionType which)
  		    break;
 	    }
 	    break;
+
+	case PageFaultException:
+		cout << "PageFault Exception occured!!"<<endl;
+		kernel->stats->numPageFaults++;
+		kernel->machine->PageFaultHandler();
+		return;
+		
 	default:
 	    cerr << "Unexpected user mode exception" << which << "\n";
 	    break;
     }
-    // ASSERTNOTREACHED();
+    ASSERTNOTREACHED();
 }

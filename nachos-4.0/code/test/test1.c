@@ -1,8 +1,13 @@
 #include "syscall.h"
 main()
 	{
-		// int	n;
-		// for (n=6;n>5;n--)
-		// 	PrintInt(n);
-		PrintInt(555555555);
+		int i;
+    		int j;
+    		for(i = 0; i < 3; i++){
+        			for(j = 0; j < 5; j++){
+            				PrintInt(100+j);
+        			}
+        			Sleep(1);
+    		}
+
 	}

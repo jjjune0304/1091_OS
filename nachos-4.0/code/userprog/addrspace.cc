@@ -28,8 +28,6 @@
 //  endian machine, and we're now running on a big endian machine.
 //----------------------------------------------------------------------
 
-bool AddrSpace::StatusTable[NumPhysPages] = {FALSE};
-
 static void 
 SwapHeader (NoffHeader *noffH)
 {
@@ -78,9 +76,6 @@ AddrSpace::AddrSpace()
 
 AddrSpace::~AddrSpace()
 {
-    for(unsigned int i = 0; i < numPages; i++){
-        AddrSpace::StatusTable[pageTable[i].physicalPage] = FALSE; // free memory
-    }
    delete pageTable;
 }
 
@@ -120,19 +115,7 @@ AddrSpace::Load(char *fileName)
 //  cout << "number of pages of " << fileName<< " is "<<numPages<<endl;
 
     pageTable = new TranslationEntry[numPages];
-    for(unsigned int i = 0, idx = 0; i < numPages; i++) {
-       
-        // assign free physical page
-        while(idx < NumPhysPages && AddrSpace::StatusTable[idx]) idx++;
-        AddrSpace::StatusTable[idx] = TRUE;
-        pageTable[i].virtualPage = i;
-        pageTable[i].physicalPage = idx;
-        pageTable[i].valid = TRUE;
-        pageTable[i].use = FALSE;
-        pageTable[i].dirty = FALSE;
-        pageTable[i].readOnly = FALSE;
-    }
-
+    
     size = numPages * PageSize;
     ASSERT(numPages <= NumPhysPages);       // check we're not trying
                         // to run anything too big --
@@ -140,20 +123,53 @@ AddrSpace::Load(char *fileName)
                         // virtual memory
 
     DEBUG(dbgAddr, "Initializing address space: " << numPages << ", " << size);
-
+// pageTable[(virtualAddr / PageSize)].physicalPage * PageSize + (virtualAddr % PageSize)
 // then, copy in the code and data segments into memory
     if (noffH.code.size > 0) {
-        DEBUG(dbgAddr, "Initializing code segment.");
-    DEBUG(dbgAddr, noffH.code.virtualAddr << ", " << noffH.code.size);
-            executable->ReadAt(
-        &(kernel->machine->mainMemory[pageTable[noffH.code.virtualAddr/PageSize].physicalPage * PageSize + (noffH.code.virtualAddr%PageSize)]),  // physical addr = page base addr + page offset
-                noffH.code.size, noffH.code.inFileAddr);
+        // DEBUG(dbgAddr, "Initializing code segment.");
+        // DEBUG(dbgAddr, noffH.code.virtualAddr << ", " << noffH.code.size);
+            for(unsigned int j=0,i=0;i < numPages ;i++){
+                 j = 0;
+                 while( !(kernel->machine->frameTable[j].valid) && j<NumPhysPages){ j++; }
+                 
+                 //if memory is enough,just put data in without using virtual memory
+                 if( j < NumPhysPages){   
+                      kernel->machine->frameTable[j].valid=FALSE;
+                      kernel->machine->frameTable[j].page = &pageTable[i];
+                
+                      pageTable[i].physicalPage = j;
+                      pageTable[i].valid = TRUE;
+                      pageTable[i].use = FALSE;
+                      pageTable[i].dirty = FALSE;
+                      pageTable[i].readOnly = FALSE;
+            
+                      executable->ReadAt(&(kernel->machine->mainMemory[j*PageSize]),PageSize, noffH.code.inFileAddr+(i*PageSize));  
+                 }
+                else{   //Use virtual memory when memory isn't enough
+                            char *buf;
+                            buf = new char[PageSize];
+                            j = 0;
+                            while(!kernel->machine->swapTable[j].valid){ j++; }
+                            // cout << "Use virtual memory" << j << endl;
+                             kernel->machine->swapTable[j].valid = FALSE;  // virtual memory is used
+                             kernel->machine->swapTable[j].page = &pageTable[i];
+
+                             pageTable[i].virtualPage = j;  // record which virtualpage you save 
+                             pageTable[i].valid = FALSE; // not load in main_memory
+                             pageTable[i].use = FALSE;
+                             pageTable[i].dirty = FALSE;
+                             pageTable[i].readOnly = FALSE;
+                             executable->ReadAt(buf,PageSize, noffH.code.inFileAddr+(i*PageSize));
+                             kernel->vm_Disk->WriteSector(j,buf); //call virtual_disk write in virtual memory
+                             delete [] buf;
+                        }
+        }
     }
     if (noffH.initData.size > 0) {
         DEBUG(dbgAddr, "Initializing data segment.");
     DEBUG(dbgAddr, noffH.initData.virtualAddr << ", " << noffH.initData.size);
         executable->ReadAt(
-        &(kernel->machine->mainMemory[pageTable[noffH.code.virtualAddr/PageSize].physicalPage * PageSize + (noffH.code.virtualAddr%PageSize)]), // physical addr = page base addr + page offset
+            &(kernel->machine->mainMemory[noffH.initData.virtualAddr]), 
             noffH.initData.size, noffH.initData.inFileAddr);
     }
 
@@ -172,6 +188,7 @@ AddrSpace::Load(char *fileName)
 void 
 AddrSpace::Execute(char *fileName) 
 {
+    pt_is_load=FALSE;
     if (!Load(fileName)) {
     cout << "inside !Load(FileName)" << endl;
     return;             // executable not found
@@ -180,7 +197,7 @@ AddrSpace::Execute(char *fileName)
     //kernel->currentThread->space = this;
     this->InitRegisters();      // set the initial register values
     this->RestoreState();       // load page table register
-
+    pt_is_load=TRUE;
     kernel->machine->Run();     // jump to the user progam
 
     ASSERTNOTREACHED();         // machine->Run never returns;
@@ -232,8 +249,10 @@ AddrSpace::InitRegisters()
 
 void AddrSpace::SaveState() 
 {
-        pageTable=kernel->machine->pageTable;
-        numPages=kernel->machine->pageTableSize;
+        if(pt_is_load){
+            pageTable=kernel->machine->pageTable;
+            numPages=kernel->machine->pageTableSize;
+    }
 }
 
 //----------------------------------------------------------------------

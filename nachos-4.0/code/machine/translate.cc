@@ -166,6 +166,99 @@ Machine::WriteMem(int addr, int size, int value)
     return TRUE;
 }
 
+
+bool Machine::AcquirePage(TranslationEntry *page)
+{
+    int sector = page->virtualPage;   
+    int i;
+    // cout<< " swapIndex:"<<sector;
+    for(i=0 ; i < NumPhysPages ;i++)
+    {
+        if(frameTable[i].valid) break; 
+    }
+    ASSERT( i < NumPhysPages );
+    
+    kernel->vm_Disk->ReadSector(sector, &(mainMemory[i*PageSize]) );  // read data from virtual memory
+    // memcpy( &(mainMemory[i*PageSize]), (&(kernel->swap) +sector*PageSize) , PageSize*sizeof(char) );
+
+    page->physicalPage = i; 
+    page->valid =TRUE;
+    
+    frameTable[i].valid = FALSE;
+    frameTable[i].page = page;
+    frameTable[i].idleCount = -1;
+    
+    swapTable[sector].valid = TRUE; 
+    swapTable[sector].page = NULL;
+    // cout<< " swap into frame["<<i<<"]"<<endl;
+    return true;   
+    
+}
+
+int Machine::ReleasePage(TranslationEntry *page) 
+{
+    int i;
+    int curFrame = page->physicalPage;
+    for(i=0 ; i < NumSectors ;i++)
+    {
+        if(swapTable[i].valid)  break;
+    }
+    ASSERT( i < NumSectors ); // virtual memory is not full
+    // cout<< "Found swap space:" << i <<endl;
+    kernel->vm_Disk->WriteSector(i, &(mainMemory[curFrame*PageSize]) );  
+    // memcpy( (&(kernel->swap) +i*PageSize), &(mainMemory[curFrame*PageSize]) , PageSize*sizeof(char) );
+    
+    swapTable[i].valid = FALSE; 
+    swapTable[i].page = page;
+    
+    frameTable[curFrame].valid =TRUE;
+    frameTable[curFrame].page = NULL;
+    frameTable[curFrame].idleCount = 0;
+    
+    page->valid = FALSE;
+    page->virtualPage = i;
+    
+    return i; 
+}
+
+void Machine::PageFaultHandler()
+{
+    
+    int i, j;
+    TranslationEntry * faultpage = kernel->currentThread->space->getPage(faultvpn);
+    // printf("faultvpn:%d ",faultvpn);
+    
+    ASSERT( (faultpage->valid) == FALSE);
+    // ASSERT( (faultpage->use) == TRUE);
+    
+    i = 0;
+    while(!frameTable[i].valid && i<NumPhysPages){ i++; } // search for a free frame
+
+    if(i >= NumPhysPages) //page replacement
+    {
+        // cout<<"Frame is full."<<endl;
+        int maxIdleValue = -1;
+        int maxIdleIndex = -1; 
+        for(j=0;j<NumPhysPages;j++) // LRU
+        {
+            if( frameTable[j].idleCount > maxIdleValue )
+            {
+                maxIdleValue = frameTable[j].idleCount;
+                maxIdleIndex = j;
+            }
+        }
+        
+        // cout<<"MaxIdleFrame:"<<maxIdleIndex<<endl;
+        // swap out victim
+        i = ReleasePage(frameTable[maxIdleIndex].page);
+        // cout<<"Choose frame["<< maxIdleIndex <<"] as victim, swapOut"<<endl;
+    }
+    AcquirePage(faultpage);    //swap in 
+    // cout<< " swap into frame["<< i << "]" <<endl;
+
+    faultvpn = -1;  // finish pageFault handling
+}
+
 //----------------------------------------------------------------------
 // Machine::Translate
 // 	Translate a virtual address into a physical address, using 
@@ -212,6 +305,7 @@ Machine::Translate(int virtAddr, int* physAddr, int size, bool writing)
 	    return AddressErrorException;
 	} else if (!pageTable[vpn].valid) {
 	    DEBUG(dbgAddr, "Invalid virtual page # " << virtAddr);
+                  faultvpn = vpn;
 	    return PageFaultException;
 	}
 	entry = &pageTable[vpn];
@@ -223,6 +317,7 @@ Machine::Translate(int virtAddr, int* physAddr, int size, bool writing)
 	    }
 	if (entry == NULL) {				// not found
     	    DEBUG(dbgAddr, "Invalid TLB entry for this virtual page!");
+                  faultvpn = vpn;
     	    return PageFaultException;		// really, this is a TLB fault,
 						// the page may be in memory,
 						// but not in the TLB
@@ -234,6 +329,12 @@ Machine::Translate(int virtAddr, int* physAddr, int size, bool writing)
 	return ReadOnlyException;
     }
     pageFrame = entry->physicalPage;
+
+    for( i=0 ; i<NumPhysPages ;i++ )
+    {
+        if( i ==  pageFrame )  continue;
+        frameTable[i].idleCount++;
+    }
 
     // if the pageFrame is too big, there is something really wrong! 
     // An invalid translation was loaded into the page table or TLB. 

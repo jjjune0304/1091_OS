@@ -64,6 +64,7 @@ UserProgKernel::Initialize(SchedulerType type)
 
     machine = new Machine(debugUserProg);
     fileSystem = new FileSystem();
+    vm_Disk = new SynchDisk("New Disk");
 #ifdef FILESYS
     synchDisk = new SynchDisk("New SynchDisk");
 #endif // FILESYS
@@ -79,6 +80,7 @@ UserProgKernel::~UserProgKernel()
 {
     delete fileSystem;
     delete machine;
+    delete vm_Disk;
 #ifdef FILESYS
     delete synchDisk;
 #endif

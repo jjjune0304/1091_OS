@@ -1,0 +1,23 @@
+#ifndef FRAME_H
+#define FRAME_H
+
+#include "addrspace.h"
+
+class FrameInfoEntry
+{
+	public:
+		bool valid;		
+		unsigned int vpn;	
+		AddrSpace *addrSpace;
+		int idleCount;	
+};
+
+class SwapInfoEntry
+{
+	public:
+		bool valid;	// if being used	
+		unsigned int vpn;	 // virtual page num
+		AddrSpace *addrSpace;
+};
+
+#endif

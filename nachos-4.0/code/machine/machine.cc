@@ -61,6 +61,22 @@ Machine::Machine(bool debug)
     mainMemory = new char[MemorySize];
     for (i = 0; i < MemorySize; i++)
       	mainMemory[i] = 0;
+
+     frameTable = new FrameInfoEntry[NumPhysPages];
+    for (i = 0; i < NumPhysPages; i++)
+    {
+        frameTable[i].valid = TRUE;
+        frameTable[i].page = NULL;
+        frameTable[i].idleCount=0;
+    }
+    swapTable = new SwapInfoEntry[NumSectors];
+    for (i = 0; i < NumSectors; i++)
+    {
+        swapTable[i].valid = TRUE;
+        swapTable[i].page = NULL;
+    }
+    faultvpn = -1;
+
 #ifdef USE_TLB
     tlb = new TranslationEntry[TLBSize];
     for (i = 0; i < TLBSize; i++)
@@ -83,6 +99,9 @@ Machine::Machine(bool debug)
 Machine::~Machine()
 {
     delete [] mainMemory;
+    delete [] frameTable;
+    delete [] swapTable;
+
     if (tlb != NULL)
         delete [] tlb;
 }

@@ -457,7 +457,7 @@ Thread::SchedulingTest()
 {
     const int thread_num = 4;
     char *name[thread_num] = {"A", "B", "C", "D"};
-    int thread_burst[thread_num] = {2, 10, 7, 7};
+    int thread_burst[thread_num] = {1, 0, 3, 2};
     
     Thread * t;
     for (int i = 0; i < thread_num; i ++) {

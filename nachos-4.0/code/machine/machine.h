@@ -30,7 +30,7 @@
 const unsigned int PageSize = 128; 		// set the page size equal to
 					// the disk sector size, for simplicity
 
-const unsigned int NumPhysPages = 32;
+const unsigned int NumPhysPages = 64;
 const int MemorySize = (NumPhysPages * PageSize);
 const int TLBSize = 4;			// if there is a TLB, make it small
 
@@ -69,6 +69,22 @@ enum ExceptionType { NoException,           // Everything ok!
 
 #define NumTotalRegs 	40
 
+
+class FrameInfoEntry
+{
+    public:
+        bool valid;     // if being used 
+        TranslationEntry *page;
+        int idleCount;  
+};
+
+class SwapInfoEntry
+{
+    public:
+        bool valid;           // if being used  
+        TranslationEntry *page;
+};
+
 // The following class defines the simulated host workstation hardware, as 
 // seen by user programs -- the CPU registers, main memory, etc.
 // User programs shouldn't be able to tell that they are running on our 
@@ -98,6 +114,12 @@ class Machine {
 
     void WriteRegister(int num, int value);
 				// store a value into a CPU register
+
+    // The functions below are implmented in translate.cc
+    bool AcquirePage(TranslationEntry *page) ;
+    int ReleasePage(TranslationEntry *page);
+    void PageFaultHandler();
+    int faultvpn;	 		//  record fault page number
 
 // Data structures accessible to the Nachos kernel -- main memory and the
 // page table/TLB.
@@ -131,6 +153,10 @@ class Machine {
 
     TranslationEntry *pageTable;
     unsigned int pageTableSize;
+
+    FrameInfoEntry *frameTable;
+    SwapInfoEntry *swapTable;
+
     bool ReadMem(int addr, int size, int* value);
   private:
 
